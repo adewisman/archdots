@@ -20,22 +20,20 @@ iwctl
 
 # Exit the prompt
 [iwd]# exit
-""
 
-""
+then : 
+
 ping archlinux.org
-""
+
 
 Step 2: Manually Install Prerequisites on the Live ISO
 
 # Sync package databases and install git and curl
 
-""
 pacman -Sy --noconfirm git curl
-""
+
 Step 3: run install.sh
 
-""
 bash <(curl -sL https://raw.githubusercontent.com/adewisman/archdots/main/install.sh)
-""
+
 
