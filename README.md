@@ -6,7 +6,6 @@ For Wi-Fi, use iwctl:
 # Enter the interactive prompt
 iwctl
 
-""
 # List devices (e.g., wlan0)
 [iwd]# device list
 
