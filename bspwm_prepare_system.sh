@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # Exit immediately if a command exits with a non-zero status.
@@ -16,7 +17,7 @@ NC='\033[0m' # No Color
 
 # Ensure the script is run with sudo
 if [ "$EUID" -ne 0 ]; then
-  echo -e "${YELLOW}Please run this script with sudo: sudo ./prepare_system.sh${NC}"
+  echo -e "${YELLOW}Please run this script with sudo: sudo ./bspwm_prepare_system.sh${NC}"
   exit 1
 fi
 
