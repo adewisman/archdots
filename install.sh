@@ -9,6 +9,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # --- INTERACTIVE SETUP FUNCTION ---
+# ... (This section is correct and remains unchanged) ...
 configure_installation() {
     clear
     echo -e "${BLUE}--- Interactive ZFS Desktop Installation Setup ---${NC}"
@@ -51,16 +52,16 @@ configure_installation() {
     if [[ "${confirm,,}" != "y" ]]; then echo -e "${YELLOW}Installation aborted.${NC}"; exit 0; fi
 }
 
+
 # --- MAIN SCRIPT EXECUTION ---
 configure_installation
 
 # --- 1. PREPARE THE LIVE ENVIRONMENT ---
+# ... (This section is correct and remains unchanged) ...
 echo -e "${GREEN}>>> Preparing the live Arch ISO environment...${NC}"
 loadkeys "$KEYMAP"
 timedatectl set-ntp true
-
 echo ">>> Setting up ArchZFS, Xlibe, and Chaotic-AUR repositories..."
-# Add ArchZFS Repo
 tee -a /etc/pacman.conf <<-'EOF'
 [archzfs]
 SigLevel = Required
@@ -69,27 +70,23 @@ EOF
 pacman-key --init &>/dev/null
 pacman-key --recv-keys --keyserver keyserver.ubuntu.com 3A9917BF0DED5C13F69AC68FABEC0A1208037BE9 &>/dev/null
 pacman-key --lsign-key 3A9917BF0DED5C13F69AC68FABEC0A1208037BE9 &>/dev/null
-
-# Add Xlibe Repo
 curl -sS https://raw.githubusercontent.com/X11Libre/binpkg-arch-based/refs/heads/main/0x73580DE2EDDFA6D6.gpg | gpg --import - &>/dev/null
 pacman-key --lsign-key 73580DE2EDDFA6D6 &>/dev/null
 if ! grep -q "\[xlibre\]" /etc/pacman.conf; then
     echo -e "\n[xlibre]\nServer = https://github.com/X11Libre/binpkg-arch-based/raw/refs/heads/main/" | tee -a /etc/pacman.conf
 fi
-
-# Add Chaotic-AUR Repo
 pacman-key --recv-key --keyserver keyserver.ubuntu.com 3056513887B78AEB &>/dev/null
 pacman-key --lsign-key 3056513887B78AEB &>/dev/null
 pacman -U --noconfirm 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst' 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst' &>/dev/null
 if ! grep -q "\[chaotic-aur\]" /etc/pacman.conf; then
     echo -e "\n[chaotic-aur]\nInclude = /etc/pacman.d/chaotic-mirrorlist" | tee -a /etc/pacman.conf
 fi
-
 pacman -Sy --noconfirm zfs-linux zfs-utils &>/dev/null
 modprobe zfs
 sleep 2
 
 # --- 2. DISK PARTITIONING & ZFS SETUP ---
+# ... (This section is correct and remains unchanged) ...
 echo -e "${GREEN}>>> Partitioning the disk and creating ZFS pool '$POOL_NAME'...${NC}"
 sgdisk --zap-all "$DISK" &>/dev/null
 sgdisk -n1:1M:+512M -t1:EF00 "$DISK" &>/dev/null
@@ -102,8 +99,8 @@ zfs create -o mountpoint=/home "$POOL_NAME/HOME/default"
 zfs mount "$POOL_NAME/ROOT/default"
 
 # --- 3. PACKAGE INSTALLATION ---
+# ... (This section is correct and remains unchanged) ...
 echo -e "${GREEN}>>> Installing all packages from official repos and Chaotic-AUR...${NC}"
-### CHANGE: Added zfs-boot-menu, zfs-snap-manager, and paru-bin to the main package list
 PKG_LIST="base base-devel linux linux-firmware linux-headers zfs-dkms zfs-boot-menu zfs-snap-manager paru-bin limine efibootmgr nano networkmanager curl git sudo"
 PKG_LIST+=" alacritty bat brightnessctl bspwm clipcat dunst eza feh fzf thunar tumbler gvfs-mtp firefox geany jq jgmenu kitty libwebp maim mpc mpd mpv neovim ncmpcpp npm pamixer pacman-contrib papirus-icon-theme picom playerctl polybar lxsession-gtk3 python-gobject redshift rofi rustup sxhkd tmux xclip xdg-user-dirs xdo xdotool xsettingsd yazi zsh zsh-autosuggestions zsh-history-substring-search zsh-syntax-highlighting ttf-inconsolata ttf-jetbrains-mono ttf-jetbrains-mono-nerd ttf-terminus-nerd ttf-ubuntu-mono-nerd webp-pixbuf-loader mesa intel-ucode pipewire pipewire-pulse wireplumber pipewire-alsa pipewire-jack bluez bluez-utils power-profiles-daemon ly"
 PKG_LIST+=" xlibre-xserver xlibre-xserver-common xlibre-xf86-input-libinput xorg-xinit libbsd"
@@ -111,16 +108,15 @@ PKG_LIST+=" visual-studio-code-bin python-pip python-pipx python-virtualenv pyth
 PKG_LIST+=" steam heroic-games-launcher-bin gamemode mangohud protonup-qt wine-staging winetricks"
 PKG_LIST+=" lib32-mesa lib32-gamemode lib32-mangohud vulkan-intel lib32-vulkan-intel vulkan-icd-loader lib32-vulkan-icd-loader ttf-liberation"
 PKG_LIST+=" ly-catppuccin-git limine-themes-git"
-
 pacstrap -K /mnt ${PKG_LIST} &>/dev/null
 mkfs.fat -F32 "$EFI_PART" &>/dev/null
 mount --mkdir "$EFI_PART" /mnt/boot/efi
 
 # --- 4. SYSTEM CONFIGURATION ---
+# ... (This section is correct and remains unchanged) ...
 echo -e "${GREEN}>>> Configuring the new system...${NC}"
-genfstab -U /mnt >> /mnt/etc/fstab
+genstab -U /mnt >> /mnt/etc/fstab
 zpool set cachefile=/etc/zfs/zpool.cache "$POOL_NAME"
-# Add all three repositories to the new system's pacman.conf
 tee -a /mnt/etc/pacman.conf <<-'EOF'
 
 [chaotic-aur]
@@ -140,13 +136,19 @@ arch-chroot /mnt /bin/bash <<EOF
 set -e
 echo ">>> Setting up repository keys on the new system..."
 pacman-key --init
+pacman-key --populate archlinux
 pacman-key --recv-keys --keyserver keyserver.ubuntu.com 3A9917BF0DED5C13F69AC68FABEC0A1208037BE9
 pacman-key --lsign-key 3A9917BF0DED5C13F69AC68FABEC0A1208037BE9
 curl -sS https://raw.githubusercontent.com/X11Libre/binpkg-arch-based/refs/heads/main/0x73580DE2EDDFA6D6.gpg | gpg --import -
 pacman-key --lsign-key 73580DE2EDDFA6D6
 pacman-key --recv-key --keyserver keyserver.ubuntu.com 3056513887B78AEB
 pacman-key --lsign-key 3056513887B78AEB
-# Install Chaotic keyring and mirrorlist packages from the repo
+
+### CRITICAL FIX: Sync pacman databases BEFORE trying to install packages.
+echo ">>> Syncing pacman databases..."
+pacman -Sy --noconfirm
+
+echo ">>> Installing Chaotic keyring and mirrorlist packages..."
 pacman -S --noconfirm chaotic-keyring chaotic-mirrorlist
 
 echo ">>> Setting system basics (timezone, locale, hostname)..."
