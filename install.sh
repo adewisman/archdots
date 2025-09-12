@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 # --- INTERACTIVE SETUP FUNCTION ---
 configure_installation() {
     clear
-    echo -e "${BLUE}--- Interactive ZFS Desktop Installation Setup ---${NC}"
+    echo -e "${BLUE}--- Interactive ZFS & gh0stzk Dotfiles Installation ---${NC}"
     
     # Disk Selection
     echo -e "\n${YELLOW}1. Select the target disk for installation:${NC}"
@@ -40,7 +40,7 @@ configure_installation() {
     # Final Confirmation
     clear
     echo -e "${BLUE}--- Installation Confirmation ---${NC}"
-    echo -e "This will install a full ZFS desktop with automated snapshots, Chaotic-AUR, and ${RED}DESTROY ALL DATA${NC} on the disk."
+    echo -e "This will install a full ZFS desktop with gh0stzk's dotfiles and ${RED}DESTROY ALL DATA${NC} on the disk."
     echo "----------------------------------------------------"
     echo -e "  Target Disk : ${YELLOW}${DISK}${NC}"
     echo -e "  ZFS Pool Name: ${YELLOW}${POOL_NAME}${NC}"
@@ -59,8 +59,13 @@ configure_installation
 echo -e "${GREEN}>>> Preparing the live Arch ISO environment...${NC}"
 loadkeys "$KEYMAP"
 timedatectl set-ntp true
-echo ">>> Setting up ArchZFS, Xlibe, and Chaotic-AUR repositories..."
+echo ">>> Setting up all required third-party repositories..."
 tee -a /etc/pacman.conf <<-'EOF'
+
+[gh0stzk-dotfiles]
+SigLevel = Optional TrustAll
+Server = http://gh0stzk.github.io/pkgs/x86_64
+
 [archzfs]
 SigLevel = Required
 Server = https://github.com/archzfs/archzfs/releases/download/experimental
@@ -96,13 +101,20 @@ zfs create -o mountpoint=/home "$POOL_NAME/HOME/default"
 zfs mount "$POOL_NAME/ROOT/default"
 
 # --- 3. PACKAGE INSTALLATION ---
-echo -e "${GREEN}>>> Installing all packages from official repos and Chaotic-AUR...${NC}"
-PKG_LIST="base base-devel linux linux-firmware linux-headers zfs-dkms zfs-boot-menu zfs-snap-manager paru-bin limine efibootmgr nano networkmanager curl git sudo"
-PKG_LIST+=" alacritty bat brightnessctl bspwm clipcat dunst eza feh fzf thunar tumbler gvfs-mtp firefox geany jq jgmenu kitty libwebp maim mpc mpd mpv neovim ncmpcpp npm pamixer pacman-contrib papirus-icon-theme picom playerctl polybar lxsession-gtk3 python-gobject redshift rofi rustup sxhkd tmux xclip xdg-user-dirs xdo xdotool xsettingsd yazi zsh zsh-autosuggestions zsh-history-substring-search zsh-syntax-highlighting ttf-inconsolata ttf-jetbrains-mono ttf-jetbrains-mono-nerd ttf-terminus-nerd ttf-ubuntu-mono-nerd webp-pixbuf-loader mesa intel-ucode pipewire pipewire-pulse wireplumber pipewire-alsa pipewire-jack bluez bluez-utils power-profiles-daemon ly"
+echo -e "${GREEN}>>> Installing all packages for the ZFS & gh0stzk desktop...${NC}"
+### CHANGE: Merged gh0stzk's package lists into our base list.
+PKG_LIST="base base-devel linux linux-firmware linux-headers zfs-dkms zfs-boot-menu zfs-snap-manager paru-bin limine efibootmgr nano networkmanager curl git sudo reflector"
+# Official Repo Dependencies from gh0stzk
+PKG_LIST+=" alacritty bat brightnessctl bspwm clipcat dunst eza feh fzf thunar tumbler gvfs-mtp firefox geany jq jgmenu kitty libwebp maim mpc mpd mpv neovim ncmpcpp npm pamixer pacman-contrib papirus-icon-theme picom playerctl polybar lxsession-gtk3 python-gobject redshift rofi rustup sxhkd tmux xclip xdg-user-dirs xdo xdotool xsettingsd xorg-xdpyinfo xorg-xkill xorg-xprop xorg-xrandr xorg-xsetroot xorg-xwininfo yazi zsh zsh-autosuggestions zsh-history-substring-search zsh-syntax-highlighting ttf-inconsolata ttf-jetbrains-mono ttf-jetbrains-mono-nerd ttf-terminus-nerd ttf-ubuntu-mono-nerd webp-pixbuf-loader mesa intel-ucode pipewire pipewire-pulse wireplumber pipewire-alsa pipewire-jack bluez bluez-utils power-profiles-daemon ly"
+# gh0stzk Custom Repo Dependencies
+PKG_LIST+=" gh0stzk-gtk-themes gh0stzk-cursor-qogirr gh0stzk-icons-beautyline gh0stzk-icons-candy gh0stzk-icons-catppuccin-mocha gh0stzk-icons-dracula gh0stzk-icons-glassy gh0stzk-icons-gruvbox-plus-dark gh0stzk-icons-hack gh0stzk-icons-luv gh0stzk-icons-sweet-rainbow gh0stzk-icons-tokyo-night gh0stzk-icons-vimix-white gh0stzk-icons-zafiro gh0stzk-icons-zafiro-purple"
+# Chaotic-AUR Dependencies
+PKG_LIST+=" eww-git i3lock-color simple-mtpfs fzf-tab-git xqp xwinwrap-0.9-bin"
+# Xlibre Dependencies (replacing xorg-server)
 PKG_LIST+=" xlibre-xserver xlibre-xserver-common xlibre-xf86-input-libinput xorg-xinit libbsd"
-PKG_LIST+=" visual-studio-code-bin python-pip python-pipx python-virtualenv python-ruff python-black pyright"
-PKG_LIST+=" steam heroic-games-launcher-bin gamemode mangohud protonup-qt wine-staging winetricks"
-PKG_LIST+=" lib32-mesa lib32-gamemode lib32-mangohud vulkan-intel lib32-vulkan-intel vulkan-icd-loader lib32-vulkan-icd-loader ttf-liberation"
+# Dev & Gaming Environment
+PKG_LIST+=" visual-studio-code-bin python-pip python-pipx python-virtualenv steam heroic-games-launcher-bin gamemode mangohud protonup-qt wine-staging winetricks lib32-mesa lib32-gamemode lib32-mangohud vulkan-intel lib32-vulkan-intel vulkan-icd-loader lib32-vulkan-icd-loader ttf-liberation"
+
 pacstrap -K /mnt ${PKG_LIST} &>/dev/null
 mkfs.fat -F32 "$EFI_PART" &>/dev/null
 mount --mkdir "$EFI_PART" /mnt/boot/efi
@@ -111,17 +123,11 @@ mount --mkdir "$EFI_PART" /mnt/boot/efi
 echo -e "${GREEN}>>> Configuring the new system...${NC}"
 genfstab -U /mnt >> /mnt/etc/fstab
 zpool set cachefile=/etc/zfs/zpool.cache "$POOL_NAME"
-
-### CHANGE: Optimize pacman.conf on the new system
-echo ">>> Optimizing pacman configuration..."
-sed -i 's/^#Color/Color/' /mnt/etc/pacman.conf
-sed -i 's/^#VerbosePkgLists/VerbosePkgLists/' /mnt/etc/pacman.conf
-sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /mnt/etc/pacman.conf
-# Add the ILoveCandy Easter egg under the [options] section
-sed -i '/\[options\]/a ILoveCandy' /mnt/etc/pacman.conf
-
-# Add repositories to the new system's pacman.conf
 tee -a /mnt/etc/pacman.conf <<-'EOF'
+
+[gh0stzk-dotfiles]
+SigLevel = Optional TrustAll
+Server = http://gh0stzk.github.io/pkgs/x86_64
 
 [chaotic-aur]
 Include = /etc/pacman.d/chaotic-mirrorlist
@@ -133,6 +139,9 @@ Server = https://github.com/archzfs/archzfs/releases/download/experimental
 [xlibre]
 Server = https://github.com/X11Libre/binpkg-arch-based/raw/refs/heads/main/
 EOF
+sed -i 's/^#Color/Color/' /mnt/etc/pacman.conf
+sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 10/' /mnt/etc/pacman.conf
+sed -i '/\[options\]/a ILoveCandy' /mnt/etc/pacman.conf
 
 # --- 5. CHROOT AND FINISH CONFIGURATION ---
 echo ">>> Chrooting into the new system to finalize setup..."
@@ -142,15 +151,16 @@ echo ">>> Setting up repository keys on the new system..."
 pacman-key --init
 pacman-key --populate archlinux
 pacman-key --recv-keys --keyserver keyserver.ubuntu.com 3A9917BF0DED5C13F69AC68FABEC0A1208037BE9
-pacman-key --lsign-key 3A9917BF0DED5C13F69AC68FABEC0A1208037BE9
+pacman-key --lsign-key 3A9917BF0DED5C13F69AC68FABEC0A120803TBE9
 curl -sS https://raw.githubusercontent.com/X11Libre/binpkg-arch-based/refs/heads/main/0x73580DE2EDDFA6D6.gpg | gpg --import -
 pacman-key --lsign-key 73580DE2EDDFA6D6
 pacman-key --recv-key --keyserver keyserver.ubuntu.com 3056513887B78AEB
 pacman-key --lsign-key 3056513887B78AEB
-echo ">>> Syncing pacman databases..."
 pacman -Sy --noconfirm
-echo ">>> Installing Chaotic keyring and mirrorlist packages..."
 pacman -S --noconfirm chaotic-keyring chaotic-mirrorlist
+
+echo ">>> Optimizing mirrorlist with reflector..."
+reflector --latest 10 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
 
 echo ">>> Setting system basics (timezone, locale, hostname)..."
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime && hwclock --systohc
@@ -166,37 +176,74 @@ useradd -m -G "\$DESKTOP_GROUPS" "$USERNAME"
 echo "Setting password for user '$USERNAME':" && passwd "$USERNAME"
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
+### CHANGE: Automated gh0stzk dotfiles installation
+echo ">>> Installing gh0stzk dotfiles for user '$USERNAME'..."
+# Enable lingering for the user so they can have user services without logging in
+loginctl enable-linger "$USERNAME"
+
+# Run the dotfile installation as the actual user
+sudo -u "$USERNAME" bash -c '
+    set -e
+    cd ~
+    echo "Cloning dotfiles repository..."
+    git clone --depth=1 https://github.com/gh0stzk/dotfiles.git ~/dotfiles
+
+    echo "Copying configuration files..."
+    mkdir -p ~/.config ~/.local/bin ~/.local/share
+    cp -r ~/dotfiles/config/* ~/.config/
+    cp -r ~/dotfiles/misc/bin ~/.local/
+    cp -r ~/dotfiles/misc/applications ~/.local/share/
+    cp -r ~/dotfiles/misc/asciiart ~/.local/share/
+    cp -r ~/dotfiles/misc/fonts ~/.local/share/
+    cp -r ~/dotfiles/home/.zshrc ~/
+    cp -r ~/dotfiles/home/.gtkrc-2.0 ~/
+    cp -r ~/dotfiles/home/.icons ~/
+
+    echo "Enabling user services..."
+    systemctl --user enable --now mpd.service
+    systemctl --user enable --now ArchUpdates.timer
+
+    echo "Updating font cache..."
+    fc-cache -rv
+'
+# Copy pacman hook as root
+cp "/home/$USERNAME/dotfiles/misc/polybar-update.hook" /etc/pacman.d/hooks/
+
+# Change default shell to ZSH for the new user
+echo ">>> Changing default shell for '$USERNAME' to ZSH..."
+chsh -s /usr/bin/zsh "$USERNAME"
+
+# Apply Picom VM fix if necessary
+if systemd-detect-virt --quiet; then
+    echo ">>> Virtual machine detected, applying Picom compatibility fix..."
+    sed -i 's/backend = "glx"/backend = "xrender"/' "/home/$USERNAME/.config/bspwm/src/config/picom.conf"
+    sed -i 's/vsync = true/vsync = false/' "/home/$USERNAME/.config/bspwm/src/config/picom.conf"
+fi
+
 echo ">>> Configuring mkinitcpio for ZFS..."
 sed -i 's/HOOKS=(base udev autodetect modconf block filesystems fsck)/HOOKS=(base udev autodetect modconf block keyboard zfs filesystems fsck)/' /etc/mkinitcpio.conf
 mkinitcpio -P
 
-echo ">>> Enabling system services (including ZFS and snapshot tools)..."
+echo ">>> Enabling system services..."
 systemctl enable NetworkManager.service bluetooth.service ly.service power-profiles-daemon.service
 systemctl enable zfs-import-cache.service zfs-mount.service zfs-import.target zsm.service
 
 echo ">>> Configuring ZFS Boot Menu..."
 zfs set org.zfsbootmenu:kernel=vmlinuz-linux "$POOL_NAME/ROOT/default"
 
-echo ">>> Downloading and setting up Catppuccin Limine theme..."
+echo ">>> Configuring Limine bootloader..."
+limine-install
 THEME_DIR=\$(mktemp -d)
 git clone --depth=1 https://github.com/catppuccin/limine.git "\$THEME_DIR"
-
-echo ">>> Configuring Limine bootloader with snapshot recovery option..."
-limine-install
 cat "\$THEME_DIR/themes/catppuccin-mocha.conf" > /boot/efi/limine.cfg
 cat >> /boot/efi/limine.cfg << LIMINE_CFG
-
-# Bootloader settings
 TIMEOUT=5
-
-# Boot entries
 :Arch Linux (Default)
     PROTOCOL=linux
     KERNEL_PATH=boot:///vmlinuz-linux
     CMDLINE=zfs=${POOL_NAME}/ROOT/default rw quiet loglevel=3
     INITRD_PATH=boot:///intel-ucode.img
     INITRD_PATH=boot:///initramfs-linux.img
-
 :ZFS Snapshots (Recovery)
     PROTOCOL=efi
     IMAGE_PATH=boot:///EFI/zbm/zfsbootmenu.EFI
@@ -206,18 +253,9 @@ rm -rf "\$THEME_DIR"
 echo ">>> Configuring Ly display manager with Catppuccin theme..."
 cat > /etc/ly/config.ini << LY_CFG
 [main]
-blank_password = false
-blank_username = false
 x_cmd = /usr/bin/X
 [desktop]
 desktop_cmd = /usr/bin/bspwm
-[lang]
-title = Welcome
-username = Username
-password = Password
-logout_text = logout
-shutdown_text = shutdown
-restart_text = restart
 [theme]
 bg = 1E1E2E
 fg = CDD6F4
@@ -234,7 +272,6 @@ echo -e "       SYSTEM INSTALLATION COMPLETE"
 echo -e "=====================================================${NC}"
 umount -R /mnt
 zpool export "$POOL_NAME"
-echo -e "Your system is configured with a ${YELLOW}ZFS${NC} foundation and ${YELLOW}automated snapshot tools${NC}."
-echo -e "${YELLOW}Pacman has been optimized${NC} with parallel downloads and a fun Easter egg."
-echo -e "The AUR helper ${YELLOW}paru${NC} is installed and ready to use."
-echo -e "${YELLOW}You can now reboot.${NC}"
+echo -e "Your system is configured with a ${YELLOW}ZFS${NC} foundation and the ${YELLOW}gh0stzk BSPWM desktop${NC}."
+echo -e "Automated snapshot tools are installed and ready."
+echo -e "${YELLOW}You can now reboot and log in as user '${USERNAME}'.${NC}"
