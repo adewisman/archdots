@@ -59,7 +59,7 @@ configure_installation
 echo -e "${GREEN}>>> Preparing the live Arch ISO environment...${NC}"
 loadkeys "$KEYMAP"
 timedatectl set-ntp true
-echo ">>> Setting up ArchZFS, Xlibe, and Chaotic-AUR repositories..."
+echo ">>> Setting up ArchZFS, Xlibre, and Chaotic-AUR repositories..."
 tee -a /etc/pacman.conf <<-'EOF'
 [archzfs]
 SigLevel = Required
