@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 # --- INTERACTIVE SETUP FUNCTION ---
 configure_installation() {
     clear
-    echo -e "${BLUE}--- Interactive ZFS & Cozytile Dotfiles Installation ---${NC}"
+    echo -e "${BLUE}--- Interactive ZFS & Cozytile (X11+Wayland) Installation ---${NC}"
     
     # Disk Selection
     echo -e "\n${YELLOW}1. Select the target disk for installation:${NC}"
@@ -34,13 +34,13 @@ configure_installation() {
     read -p "Enter hostname [arch-zfs]: " HOSTNAME; HOSTNAME=${HOSTNAME:-arch-zfs}
     read -p "Enter username for your new user [archuser]: " USERNAME; USERNAME=${USERNAME:-archuser}
     read -p "Enter timezone [Asia/Jakarta]: " TIMEZONE; TIMEZONE=${TIMEZONE:-Asia/Jakarta}
-    read -p "Enter locale [en_US.UTF-8]: " LOCALE; LOCALE=${LOCALE:-en_US.UTF-8}
+    read -p "Enter locale [en_US.UTF-8]: " LOCALE; LOCALE=${LOCALE:-en_US.UTF_8}
     read -p "Enter keymap [us]: " KEYMAP; KEYMAP=${KEYMAP:-us}
 
     # Final Confirmation
     clear
     echo -e "${BLUE}--- Installation Confirmation ---${NC}"
-    echo -e "This will install a full ZFS desktop with Cozytile and ${RED}DESTROY ALL DATA${NC} on the disk."
+    echo -e "This will install a full ZFS desktop with Cozytile (X11 & Wayland) and ${RED}DESTROY ALL DATA${NC} on the disk."
     echo "----------------------------------------------------"
     echo -e "  Target Disk : ${YELLOW}${DISK}${NC}"
     echo -e "  ZFS Pool Name: ${YELLOW}${POOL_NAME}${NC}"
@@ -97,9 +97,9 @@ zfs mount "$POOL_NAME/ROOT/default"
 
 # --- 3. PACKAGE INSTALLATION ---
 echo -e "${GREEN}>>> Installing all packages for the ZFS & Cozytile desktop...${NC}"
-### CHANGE: Overhauled package list for Cozytile
+### CHANGE: Reverted to `ly` and added the full Wayland ecosystem.
 PKG_LIST="base base-devel linux linux-firmware linux-headers zfs-dkms zfs-boot-menu zfs-snap-manager paru-bin limine efibootmgr nano networkmanager curl git sudo reflector"
-# Cozytile Dependencies (official repos)
+# Cozytile Dependencies (official repos) - using `ly` instead of `sddm`
 PKG_LIST+=" qtile python-psutil picom dunst zsh starship mpd ncmpcpp playerctl brightnessctl alacritty pfetch htop flameshot thunar roficlip rofi ranger cava neovim vim feh ly noto-fonts pipewire pipewire-pulse pamixer"
 # Cozytile Dependencies (Chaotic-AUR)
 PKG_LIST+=" pywal-git"
@@ -107,6 +107,9 @@ PKG_LIST+=" pywal-git"
 PKG_LIST+=" xlibre-xserver xlibre-xserver-common xlibre-xf86-input-libinput xorg-xinit"
 # Additional common packages
 PKG_LIST+=" mesa intel-ucode bluez bluez-utils power-profiles-daemon firefox"
+# Wayland Ecosystem Packages
+PKG_LIST+=" xorg-xwayland qt6-wayland glfw-wayland wl-clipboard swaylock swaybg wofi waybar wdisplays grim slurp"
+PKG_LIST+=" xdg-desktop-portal xdg-desktop-portal-wlr"
 
 pacstrap -K /mnt ${PKG_LIST} &>/dev/null
 mkfs.fat -F32 "$EFI_PART" &>/dev/null
@@ -165,34 +168,24 @@ useradd -m -G "\$DESKTOP_GROUPS" "$USERNAME"
 echo "Setting password for user '$USERNAME':" && passwd "$USERNAME"
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-### CHANGE: Automated Cozytile dotfiles installation
 echo ">>> Installing Cozytile dotfiles for user '$USERNAME'..."
 sudo -u "$USERNAME" bash -c '
     set -e
     cd ~
-    echo "Cloning Cozytile repository..."
     git clone https://github.com/Darkkal44/Cozytile.git ~/Cozytile
-
-    echo "Copying configuration files, wallpapers, and fonts..."
     mkdir -p ~/.config ~/.local/share/fonts ~/Wallpaper ~/Themes
     cp -r ~/Cozytile/.config/* ~/.config/
     cp -r ~/Cozytile/Wallpaper/* ~/Wallpaper/
     cp -r ~/Cozytile/Themes/* ~/Themes/
     cp -r ~/Cozytile/fonts/* ~/.local/share/fonts/
     fc-cache -f
-
-    echo "Installing Oh My Zsh and plugins..."
     export ZSH_CUSTOM="~/.oh-my-zsh/custom"
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
     git clone https://github.com/zsh-users/zsh-autosuggestions \${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
     git clone https://github.com/zsh-users/zsh-syntax-highlighting.git \${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
     cp ~/Cozytile/.zshrc ~/.zshrc
-
-    echo "Pre-generating Pywal color schemes..."
-    wal -b 282738 -i ~/Wallpaper/Aesthetic2.png &>/dev/null
-    wal -b 282738 -i ~/Wallpaper/120_-_KnFPX73.jpg &>/dev/null
-    wal -i ~/Wallpaper/claudio-testa-FrlCwXwbwkk-unsplash.jpg &>/dev/null
-    wal -b 232A2E -i ~/Wallpaper/fog_forest_2.png &>/dev/null
+    wal -n -b 282738 -i ~/Wallpaper/Aesthetic2.png &>/dev/null
+    # Note: Added -n to wal to skip setting the wallpaper, as feh won't work in this context.
 '
 chsh -s /usr/bin/zsh "$USERNAME"
 
@@ -201,6 +194,7 @@ sed -i 's/HOOKS=(base udev autodetect modconf block filesystems fsck)/HOOKS=(bas
 mkinitcpio -P
 
 echo ">>> Enabling system services..."
+### CHANGE: Reverted to ly.service
 systemctl enable NetworkManager.service bluetooth.service ly.service power-profiles-daemon.service
 systemctl enable zfs-import-cache.service zfs-mount.service zfs-import.target zsm.service
 
@@ -227,7 +221,7 @@ LIMINE_CFG
 rm -rf "\$THEME_DIR"
 
 echo ">>> Configuring Ly display manager for Qtile..."
-### CHANGE: Updated Ly to launch Qtile and applied Catppuccin theme
+### CHANGE: Re-added Ly configuration, setting Qtile as the default.
 cat > /etc/ly/config.ini << LY_CFG
 [main]
 x_cmd = /usr/bin/X
@@ -250,5 +244,6 @@ echo -e "=====================================================${NC}"
 umount -R /mnt
 zpool export "$POOL_NAME"
 echo -e "Your system is configured with a ${YELLOW}ZFS${NC} foundation and the ${YELLOW}Cozytile Qtile desktop${NC}."
+echo -e "Tools for both ${YELLOW}X11 and Wayland sessions${NC} have been installed."
 echo -e "Automated snapshot tools are installed and ready."
-echo -e "${YELLOW}You can now reboot and log in as user '${USERNAME}'.${NC}"
+echo -e "${YELLOW}You can now reboot. At the Ly login screen, press F1 to cycle sessions before logging in.${NC}"
