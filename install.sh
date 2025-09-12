@@ -9,7 +9,6 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # --- INTERACTIVE SETUP FUNCTION ---
-# ... (This section is correct and remains unchanged) ...
 configure_installation() {
     clear
     echo -e "${BLUE}--- Interactive ZFS Desktop Installation Setup ---${NC}"
@@ -57,7 +56,6 @@ configure_installation() {
 configure_installation
 
 # --- 1. PREPARE THE LIVE ENVIRONMENT ---
-# ... (This section is correct and remains unchanged) ...
 echo -e "${GREEN}>>> Preparing the live Arch ISO environment...${NC}"
 loadkeys "$KEYMAP"
 timedatectl set-ntp true
@@ -86,7 +84,6 @@ modprobe zfs
 sleep 2
 
 # --- 2. DISK PARTITIONING & ZFS SETUP ---
-# ... (This section is correct and remains unchanged) ...
 echo -e "${GREEN}>>> Partitioning the disk and creating ZFS pool '$POOL_NAME'...${NC}"
 sgdisk --zap-all "$DISK" &>/dev/null
 sgdisk -n1:1M:+512M -t1:EF00 "$DISK" &>/dev/null
@@ -99,7 +96,6 @@ zfs create -o mountpoint=/home "$POOL_NAME/HOME/default"
 zfs mount "$POOL_NAME/ROOT/default"
 
 # --- 3. PACKAGE INSTALLATION ---
-# ... (This section is correct and remains unchanged) ...
 echo -e "${GREEN}>>> Installing all packages from official repos and Chaotic-AUR...${NC}"
 PKG_LIST="base base-devel linux linux-firmware linux-headers zfs-dkms zfs-boot-menu zfs-snap-manager paru-bin limine efibootmgr nano networkmanager curl git sudo"
 PKG_LIST+=" alacritty bat brightnessctl bspwm clipcat dunst eza feh fzf thunar tumbler gvfs-mtp firefox geany jq jgmenu kitty libwebp maim mpc mpd mpv neovim ncmpcpp npm pamixer pacman-contrib papirus-icon-theme picom playerctl polybar lxsession-gtk3 python-gobject redshift rofi rustup sxhkd tmux xclip xdg-user-dirs xdo xdotool xsettingsd yazi zsh zsh-autosuggestions zsh-history-substring-search zsh-syntax-highlighting ttf-inconsolata ttf-jetbrains-mono ttf-jetbrains-mono-nerd ttf-terminus-nerd ttf-ubuntu-mono-nerd webp-pixbuf-loader mesa intel-ucode pipewire pipewire-pulse wireplumber pipewire-alsa pipewire-jack bluez bluez-utils power-profiles-daemon ly"
@@ -107,16 +103,24 @@ PKG_LIST+=" xlibre-xserver xlibre-xserver-common xlibre-xf86-input-libinput xorg
 PKG_LIST+=" visual-studio-code-bin python-pip python-pipx python-virtualenv python-ruff python-black pyright"
 PKG_LIST+=" steam heroic-games-launcher-bin gamemode mangohud protonup-qt wine-staging winetricks"
 PKG_LIST+=" lib32-mesa lib32-gamemode lib32-mangohud vulkan-intel lib32-vulkan-intel vulkan-icd-loader lib32-vulkan-icd-loader ttf-liberation"
-PKG_LIST+=" ly-catppuccin-git limine-themes-git"
 pacstrap -K /mnt ${PKG_LIST} &>/dev/null
 mkfs.fat -F32 "$EFI_PART" &>/dev/null
 mount --mkdir "$EFI_PART" /mnt/boot/efi
 
 # --- 4. SYSTEM CONFIGURATION ---
-# ... (This section is correct and remains unchanged) ...
 echo -e "${GREEN}>>> Configuring the new system...${NC}"
-genstab -U /mnt >> /mnt/etc/fstab
+genfstab -U /mnt >> /mnt/etc/fstab
 zpool set cachefile=/etc/zfs/zpool.cache "$POOL_NAME"
+
+### CHANGE: Optimize pacman.conf on the new system
+echo ">>> Optimizing pacman configuration..."
+sed -i 's/^#Color/Color/' /mnt/etc/pacman.conf
+sed -i 's/^#VerbosePkgLists/VerbosePkgLists/' /mnt/etc/pacman.conf
+sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /mnt/etc/pacman.conf
+# Add the ILoveCandy Easter egg under the [options] section
+sed -i '/\[options\]/a ILoveCandy' /mnt/etc/pacman.conf
+
+# Add repositories to the new system's pacman.conf
 tee -a /mnt/etc/pacman.conf <<-'EOF'
 
 [chaotic-aur]
@@ -143,11 +147,8 @@ curl -sS https://raw.githubusercontent.com/X11Libre/binpkg-arch-based/refs/heads
 pacman-key --lsign-key 73580DE2EDDFA6D6
 pacman-key --recv-key --keyserver keyserver.ubuntu.com 3056513887B78AEB
 pacman-key --lsign-key 3056513887B78AEB
-
-### CRITICAL FIX: Sync pacman databases BEFORE trying to install packages.
 echo ">>> Syncing pacman databases..."
 pacman -Sy --noconfirm
-
 echo ">>> Installing Chaotic keyring and mirrorlist packages..."
 pacman -S --noconfirm chaotic-keyring chaotic-mirrorlist
 
@@ -176,21 +177,31 @@ systemctl enable zfs-import-cache.service zfs-mount.service zfs-import.target zs
 echo ">>> Configuring ZFS Boot Menu..."
 zfs set org.zfsbootmenu:kernel=vmlinuz-linux "$POOL_NAME/ROOT/default"
 
+echo ">>> Downloading and setting up Catppuccin Limine theme..."
+THEME_DIR=\$(mktemp -d)
+git clone --depth=1 https://github.com/catppuccin/limine.git "\$THEME_DIR"
+
 echo ">>> Configuring Limine bootloader with snapshot recovery option..."
 limine-install
-cat > /boot/efi/limine.cfg << LIMINE_CFG
+cat "\$THEME_DIR/themes/catppuccin-mocha.conf" > /boot/efi/limine.cfg
+cat >> /boot/efi/limine.cfg << LIMINE_CFG
+
+# Bootloader settings
 TIMEOUT=5
-TERM_WALLPAPER=boot:///limine-themes/catppuccin-mocha/background.png
+
+# Boot entries
 :Arch Linux (Default)
     PROTOCOL=linux
     KERNEL_PATH=boot:///vmlinuz-linux
     CMDLINE=zfs=${POOL_NAME}/ROOT/default rw quiet loglevel=3
     INITRD_PATH=boot:///intel-ucode.img
     INITRD_PATH=boot:///initramfs-linux.img
+
 :ZFS Snapshots (Recovery)
     PROTOCOL=efi
     IMAGE_PATH=boot:///EFI/zbm/zfsbootmenu.EFI
 LIMINE_CFG
+rm -rf "\$THEME_DIR"
 
 echo ">>> Configuring Ly display manager with Catppuccin theme..."
 cat > /etc/ly/config.ini << LY_CFG
@@ -223,8 +234,7 @@ echo -e "       SYSTEM INSTALLATION COMPLETE"
 echo -e "=====================================================${NC}"
 umount -R /mnt
 zpool export "$POOL_NAME"
-echo -e "Your system is configured with a ${YELLOW}ZFS${NC} foundation, ${YELLOW}Chaotic-AUR${NC}, and automated snapshot tools."
+echo -e "Your system is configured with a ${YELLOW}ZFS${NC} foundation and ${YELLOW}automated snapshot tools${NC}."
+echo -e "${YELLOW}Pacman has been optimized${NC} with parallel downloads and a fun Easter egg."
 echo -e "The AUR helper ${YELLOW}paru${NC} is installed and ready to use."
-echo -e "On boot, you can choose 'ZFS Snapshots' for recovery."
-echo -e "Pacman will now automatically create snapshots before and after system updates."
 echo -e "${YELLOW}You can now reboot.${NC}"
