@@ -134,7 +134,7 @@ partition_and_zfs() {
     else
         EFI_PART="${DISK}1"; ZFS_PART="${DISK}2"
     fi
-    zpool create -f -o ashift=12 -o autotrim=on -O acltype=posixacl -O xattr=sa -O dnodesize=auto -O compression=zstd -O normalization=formD -O relatime=on -O canmount=off -O mountpoint=none -R /mnt "$POOL_NAME" "$ZFS_PART"
+    zpool create -f -o ashift=12 -o autotrim=on -O acltype=posixacl -O xattr=sa -O dnodesize=auto -O compression=zstd -O normalization=formD -O relatime=on -O canmount=off -O mountpoint=none -R /mnt "[...]
     zfs create -o canmount=noauto -o mountpoint=/ "$POOL_NAME/ROOT/default"
     zfs create -o mountpoint=/home "$POOL_NAME/HOME/default"
     zfs mount "$POOL_NAME/ROOT/default"
@@ -143,7 +143,7 @@ partition_and_zfs() {
 install_packages() {
     echo -e "${GREEN}>>> Installing all packages for the ZFS & Cozytile desktop...${NC}"
     PKG_LIST="base base-devel linux linux-firmware linux-headers zfs-dkms zfs-boot-menu zfs-snap-manager paru-bin limine efibootmgr nano networkmanager curl git sudo reflector"
-    PKG_LIST+=" qtile python-psutil picom dunst zsh starship mpd ncmpcpp playerctl brightnessctl alacritty pfetch htop flameshot thunar roficlip rofi ranger cava neovim vim feh ly noto-fonts pipewire pipewire-pulse wireplumber pavucontrol"
+    PKG_LIST+=" qtile python-psutil picom dunst zsh starship mpd ncmpcpp playerctl brightnessctl alacritty pfetch htop flameshot thunar roficlip rofi ranger cava neovim vim feh ly noto-fonts pipewire [...]
     PKG_LIST+=" pywal-git"
     PKG_LIST+=" xlibre-xserver xlibre-xserver-common xlibre-xf86-input-libinput xorg-xinit"
     PKG_LIST+=" mesa intel-ucode bluez bluez-utils power-profiles-daemon firefox"
@@ -288,8 +288,6 @@ final_message() {
 require lsblk
 require sgdisk
 require smartctl
-require zpool
-require zfs
 require pacman
 require curl
 require git
