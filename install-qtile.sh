@@ -288,8 +288,8 @@ final_message() {
 require lsblk
 require sgdisk
 require smartctl
-require zpool
-require zfs
+#require zpool
+#require zfs
 require pacman
 require curl
 require git
