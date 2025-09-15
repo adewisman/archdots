@@ -28,10 +28,6 @@ require curl
 require sudo
 require useradd
 
-# --- Qtile & Desktop Packages ---
-echo -e "${GREEN}>>> Installing Qtile and desktop packages...${NC}"
-PKG_LIST="qtile python-psutil picom dunst zsh starship mpd ncmpcpp playerctl brightnessctl alacritty pfetch htop flameshot thunar roficlip rofi ranger cava neovim vim feh ly noto-fonts pipewire-pulse wireplumber pavucontrol bluez bluez-utils power-profiles-daemon firefox xorg-xinit xorg-xwayland qt6-wayland glfw-wayland wl-clipboard swaylock swaybg wofi waybar wdisplays grim slurp xdg-desktop-portal xdg-desktop-portal-wlr"
-sudo pacman -Syu --noconfirm $PKG_LIST
 
 # --- Limine Bootloader & Theme ---
 echo -e "${GREEN}>>> Installing Limine bootloader and Catppuccin theme...${NC}"
