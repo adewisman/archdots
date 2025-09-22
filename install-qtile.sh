@@ -22,52 +22,7 @@ fail() {
     exit 1
 }
 
-# --- Hardware Checks ---
-check_uefi() {
-    if [ ! -d /sys/firmware/efi ]; then
-        echo -e "${RED}System is NOT booted in UEFI mode. EFI setup may fail.${NC}"
-        read -n1 -r -p "Continue anyway? [y/N]: " choice
-        [[ "${choice,,}" == "y" ]] || exit 1
-    fi
-}
-
-check_network() {
-    if ! ping -c 1 archlinux.org &>/dev/null; then
-        fail "No network connection detected. Please connect to the Internet before running."
-    fi
-}
-
-check_disk() {
-    local disk="$1"
-    if ! [ -b "$disk" ]; then
-        fail "Disk device $disk does not exist."
-    fi
-    if smartctl -a "$disk" | grep -q "SMART overall-health: FAILED"; then
-        fail "Disk $disk failed SMART health check!"
-    fi
-}
-
 # --- Dialog-based User Experience ---
-select_disk_dialog() {
-    local disks
-    disks=$(lsblk -d -n --output NAME,SIZE,MODEL | grep -v "rom")
-    local disk_array=()
-    while IFS= read -r line; do
-        disk_array+=("$line" "")
-    done <<< "$disks"
-    local choice
-    if command -v dialog &>/dev/null; then
-        choice=$(dialog --clear --stdout --title "Disk Selection" --menu "Select target disk for installation:" 15 60 6 "${disk_array[@]}")
-    else
-        echo -e "${YELLOW}Available disks:${NC}"
-        select disk in ${disks}; do
-            choice="${disk%% *}"
-            break
-        done
-    fi
-    echo "$choice"
-}
-
 confirm_dialog() {
     local message="$1"
     if command -v dialog &>/dev/null; then
@@ -93,15 +48,8 @@ import_key() {
 }
 
 setup_repos_and_keys() {
-    echo -e "${GREEN}>>> Setting up ArchZFS, Xlibre, and Chaotic-AUR repositories...${NC}"
-    pacman -Sy --noconfirm dirmngr
-
-    # archzfs repo
-    grep -q "^\[archzfs\]" /etc/pacman.conf || tee -a /etc/pacman.conf <<-'EOF'
-[archzfs]
-SigLevel = Required
-Server = https://github.com/archzfs/archzfs/releases/download/experimental
-EOF
+    echo -e "${GREEN}>>> Setting up extra repositories (Xlibre, Chaotic-AUR) and keys...${NC}"
+    pacman -S --noconfirm --needed dirmngr
 
     # Xlibre repo
     grep -q "^\[xlibre\]" /etc/pacman.conf || echo -e "\n[xlibre]\nServer = https://github.com/X11Libre/binpkg-arch-based/raw/refs/heads/main/" | tee -a /etc/pacman.conf
@@ -117,124 +65,78 @@ EOF
     fi
 
     # Import repo keys
-    import_key "3A9917BF0DED5C13F69AC68FABEC0A1208037BE9"
     curl -sS https://raw.githubusercontent.com/X11Libre/binpkg-arch-based/refs/heads/main/0x73580DE2EDDFA6D6.gpg | gpg --import -
     pacman-key --lsign-key 73580DE2EDDFA6D6 || fail "Failed to sign Xlibre key"
-    import_key "3056513887B78AEB"
-}
+    import_key "3056513887B78AEB" # Chaotic-AUR key
 
-partition_and_zfs() {
-    echo -e "${GREEN}>>> Partitioning the disk and creating ZFS pool '${POOL_NAME}'...${NC}"
-    sgdisk --zap-all "$DISK"
-    sgdisk -n1:1M:+512M -t1:EF00 "$DISK"
-    sgdisk -n2:0:0 -t2:BF00 "$DISK"
-    sleep 2
-    if [[ $DISK == *"nvme"* ]]; then
-        EFI_PART="${DISK}p1"; ZFS_PART="${DISK}p2"
-    else
-        EFI_PART="${DISK}1"; ZFS_PART="${DISK}2"
-    fi
-    zpool create -f -o ashift=12 -o autotrim=on -O acltype=posixacl -O xattr=sa -O dnodesize=auto -O compression=zstd -O normalization=formD -O relatime=on -O canmount=off -O mountpoint=none -R /mnt "[...]
-    zfs create -o canmount=noauto -o mountpoint=/ "$POOL_NAME/ROOT/default"
-    zfs create -o mountpoint=/home "$POOL_NAME/HOME/default"
-    zfs mount "$POOL_NAME/ROOT/default"
+    echo -e "${GREEN}>>> Applying pacman optimizations...${NC}"
+    sed -i 's/^#Color/Color/' /etc/pacman.conf
+    sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 10/' /etc/pacman.conf
+    sed -i '/\[options\]/a ILoveCandy' /etc/pacman.conf
+
+    echo -e "${GREEN}>>> Synchronizing package databases...${NC}"
+    pacman -Sy
 }
 
 install_packages() {
-    echo -e "${GREEN}>>> Installing all packages for the ZFS & Cozytile desktop...${NC}"
-    PKG_LIST="base base-devel linux linux-firmware linux-headers zfs-dkms zfs-boot-menu zfs-snap-manager paru-bin limine efibootmgr nano networkmanager curl git sudo reflector"
-    PKG_LIST+=" qtile python-psutil picom dunst zsh starship mpd ncmpcpp playerctl brightnessctl alacritty pfetch htop flameshot thunar roficlip rofi ranger cava neovim vim feh ly noto-fonts pipewire [...]
+    echo -e "${GREEN}>>> Installing all packages for the Cozytile desktop...${NC}"
+    # Base packages are assumed to be installed by bare-install.sh
+    # We use --needed to avoid reinstalling them.
+    PKG_LIST="zfs-boot-menu zfs-snap-manager paru-bin reflector"
+    PKG_LIST+=" qtile python-psutil picom dunst zsh starship mpd ncmpcpp playerctl brightnessctl alacritty pfetch htop flameshot thunar roficlip rofi ranger cava neovim vim feh ly noto-fonts pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber"
     PKG_LIST+=" pywal-git"
     PKG_LIST+=" xlibre-xserver xlibre-xserver-common xlibre-xf86-input-libinput xorg-xinit"
     PKG_LIST+=" mesa intel-ucode bluez bluez-utils power-profiles-daemon firefox"
     PKG_LIST+=" xorg-xwayland qt6-wayland glfw-wayland wl-clipboard swaylock swaybg wofi waybar wdisplays grim slurp"
     PKG_LIST+=" xdg-desktop-portal xdg-desktop-portal-wlr"
-    pacstrap -K /mnt ${PKG_LIST}
-    mkfs.fat -F32 "$EFI_PART"
-    mount --mkdir "$EFI_PART" /mnt/boot/efi
+    pacman -S --noconfirm --needed ${PKG_LIST}
 }
 
-configure_system() {
-    echo -e "${GREEN}>>> Configuring the new system...${NC}"
-    genfstab -U /mnt >> /mnt/etc/fstab
-    zpool set cachefile=/etc/zfs/zpool.cache "$POOL_NAME"
-    sed -i 's/^#Color/Color/' /mnt/etc/pacman.conf
-    sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 10/' /mnt/etc/pacman.conf
-    sed -i '/\[options\]/a ILoveCandy' /mnt/etc/pacman.conf
-    tee -a /mnt/etc/pacman.conf <<-'EOF'
+finalize_setup() {
+    echo -e "${GREEN}>>> Finalizing system configuration...${NC}"
 
-[chaotic-aur]
-Include = /etc/pacman.d/chaotic-mirrorlist
+    echo ">>> Updating mirrorlist..."
+    reflector --latest 10 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
 
-[archzfs]
-SigLevel = Required
-Server = https://github.com/archzfs/archzfs/releases/download/experimental
+    echo ">>> Setting up Cozytile for user '$USERNAME'..."
+    sudo -u "$USERNAME" bash -c '
+        set -e
+        cd ~
+        git clone https://github.com/Darkkal44/Cozytile.git ~/Cozytile
+        mkdir -p ~/.config ~/.local/share/fonts ~/Wallpaper ~/Themes
+        cp -r ~/Cozytile/.config/* ~/.config/
+        cp -r ~/Cozytile/Wallpaper/* ~/Wallpaper/
+        cp -r ~/Cozytile/Themes/* ~/Themes/
+        cp -r ~/Cozytile/fonts/* ~/.local/share/fonts/
+        fc-cache -f
+        export ZSH_CUSTOM="~/.oh-my-zsh/custom"
+        if [ ! -d ~/.oh-my-zsh ]; then
+            sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+        fi
+        git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+        git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+        cp ~/Cozytile/.zshrc ~/.zshrc
+        wal -n -b 282738 -i ~/Wallpaper/Aesthetic2.png &>/dev/null
+    '
+    echo ">>> Changing shell for '$USERNAME' to zsh..."
+    chsh -s /usr/bin/zsh "$USERNAME"
 
-[xlibre]
-Server = https://github.com/X11Libre/binpkg-arch-based/raw/refs/heads/main/
-EOF
-}
+    echo ">>> Re-generating initramfs..."
+    # The hook is already configured by bare-install.sh, but we run this
+    # again to make sure any new kernel/module changes are included.
+    mkinitcpio -P
 
-finalize_in_chroot() {
-arch-chroot /mnt /bin/bash <<EOF
-set -e
-pacman -Sy --noconfirm dirmngr
-if [ ! -d /etc/pacman.d/gnupg ] || [ -z "\$(ls -A /etc/pacman.d/gnupg)" ]; then
-    pacman-key --init
-    pacman-key --populate archlinux
-fi
-pacman-key --recv-keys --keyserver keyserver.ubuntu.com 3A9917BF0DED5C13F69AC68FABEC0A1208037BE9
-pacman-key --lsign-key 3A9917BF0DED5C13F69AC68FABEC0A1208037BE9
-curl -sS https://raw.githubusercontent.com/X11Libre/binpkg-arch-based/refs/heads/main/0x73580DE2EDDFA6D6.gpg | gpg --import -
-pacman-key --lsign-key 73580DE2EDDFA6D6
-pacman-key --recv-key --keyserver keyserver.ubuntu.com 3056513887B78AEB
-pacman-key --lsign-key 3056513887B78AEB
-pacman -Sy --noconfirm chaotic-keyring chaotic-mirrorlist
+    echo ">>> Enabling essential services..."
+    systemctl enable bluetooth.service ly.service power-profiles-daemon.service
+    systemctl enable zsm.service # zfs-snap-manager
 
-reflector --latest 10 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
-ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime && hwclock --systohc
-echo "$LOCALE UTF-8" >> /etc/locale.gen && locale-gen
-echo "LANG=$LOCALE" > /etc/locale.conf && echo "KEYMAP=$KEYMAP" > /etc/vconsole.conf
-echo "$HOSTNAME" > /etc/hostname
-{ echo "127.0.0.1 localhost"; echo "::1 localhost"; echo "127.0.1.1 $HOSTNAME.localdomain $HOSTNAME"; } >> /etc/hosts
-
-echo "Setting root password:" && passwd
-DESKTOP_GROUPS="wheel,adm,log,systemd-journal,rfkill,games,uucp,input"
-useradd -m -G "\$DESKTOP_GROUPS" "$USERNAME"
-echo "Setting password for user '$USERNAME':" && passwd "$USERNAME"
-sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
-
-sudo -u "$USERNAME" bash -c '
-    set -e
-    cd ~
-    git clone https://github.com/Darkkal44/Cozytile.git ~/Cozytile
-    mkdir -p ~/.config ~/.local/share/fonts ~/Wallpaper ~/Themes
-    cp -r ~/Cozytile/.config/* ~/.config/
-    cp -r ~/Cozytile/Wallpaper/* ~/Wallpaper/
-    cp -r ~/Cozytile/Themes/* ~/Themes/
-    cp -r ~/Cozytile/fonts/* ~/.local/share/fonts/
-    fc-cache -f
-    export ZSH_CUSTOM="~/.oh-my-zsh/custom"
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-    git clone https://github.com/zsh-users/zsh-autosuggestions \${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-    git clone https://github.com/zsh-users/zsh-syntax-highlighting.git \${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-    cp ~/Cozytile/.zshrc ~/.zshrc
-    wal -n -b 282738 -i ~/Wallpaper/Aesthetic2.png &>/dev/null
-'
-chsh -s /usr/bin/zsh "$USERNAME"
-
-sed -i 's/HOOKS=(base udev autodetect modconf block filesystems fsck)/HOOKS=(base udev autodetect modconf block keyboard zfs filesystems fsck)/' /etc/mkinitcpio.conf
-mkinitcpio -P
-
-systemctl enable NetworkManager.service bluetooth.service ly.service power-profiles-daemon.service
-systemctl enable zfs-import-cache.service zfs-mount.service zfs-import.target zsm.service
-
-zfs set org.zfsbootmenu:kernel=vmlinuz-linux "$POOL_NAME/ROOT/default"
-limine-install
-THEME_DIR=\$(mktemp -d)
-git clone --depth=1 https://github.com/catppuccin/limine.git "\$THEME_DIR"
-cat "\$THEME_DIR/themes/catppuccin-mocha.conf" > /boot/efi/limine.cfg
-cat >> /boot/efi/limine.cfg << LIMINE_CFG
+    echo ">>> Configuring bootloader (Limine) with theme and snapshots..."
+    zfs set org.zfsbootmenu:kernel=vmlinuz-linux "$POOL_NAME/ROOT/default"
+    limine-install
+    THEME_DIR=$(mktemp -d)
+    git clone --depth=1 https://github.com/catppuccin/limine.git "$THEME_DIR"
+    cat "$THEME_DIR/themes/catppuccin-mocha.conf" > /boot/efi/limine.cfg
+    cat >> /boot/efi/limine.cfg << LIMINE_CFG
 TIMEOUT=5
 :Arch Linux (Default)
     PROTOCOL=linux
@@ -246,9 +148,10 @@ TIMEOUT=5
     PROTOCOL=efi
     IMAGE_PATH=boot:///EFI/zbm/zfsbootmenu.EFI
 LIMINE_CFG
-rm -rf "\$THEME_DIR"
+    rm -rf "$THEME_DIR"
 
-cat > /etc/ly/config.ini << LY_CFG
+    echo ">>> Configuring Ly display manager..."
+    cat > /etc/ly/config.ini << LY_CFG
 [main]
 x_cmd = /usr/bin/X
 [desktop]
@@ -262,21 +165,18 @@ err_bg = 1E1E2E
 err_fg = F38BA8
 LY_CFG
 
-# --- Post-install Checks ---
-echo -e "${GREEN}Post-install checks:${NC}"
-zpool status || echo -e "${RED}ZFS pool not healthy!${NC}"
-systemctl --no-pager --failed
-echo -e "${YELLOW}Check above for any failed systemd services.${NC}"
-EOF
+    # --- Post-install Checks ---
+    echo -e "${GREEN}Post-install checks:${NC}"
+    zpool status || echo -e "${RED}ZFS pool not healthy!${NC}"
+    systemctl --no-pager --failed
+    echo -e "${YELLOW}Check above for any failed systemd services.${NC}"
 }
 
 final_message() {
     echo -e "\n${GREEN}====================================================="
-    echo -e "       SYSTEM INSTALLATION COMPLETE"
+    echo -e "       QTILE DESKTOP INSTALLATION COMPLETE"
     echo -e "=====================================================${NC}"
-    umount -R /mnt
-    zpool export "$POOL_NAME"
-    echo -e "Your system is configured with a ${YELLOW}ZFS${NC} foundation and the ${YELLOW}Cozytile Qtile desktop${NC}."
+    echo -e "Your system is configured with the ${YELLOW}Cozytile Qtile desktop${NC}."
     echo -e "Tools for both ${YELLOW}X11 and Wayland sessions${NC} have been installed."
     echo -e "Automated snapshot tools are installed and ready."
     echo -e "${YELLOW}You can now reboot. At the Ly login screen, press F1 to cycle sessions before logging in.${NC}"
@@ -285,35 +185,36 @@ final_message() {
 
 # ---------------- MAIN ----------------
 
-require lsblk
-require sgdisk
-require smartctl
+if [[ $EUID -ne 0 ]]; then
+   fail "This script must be run as root or with sudo."
+fi
+
 require pacman
-require curl
 require git
-require mkfs.fat
-require mount
+require curl
+require zpool
+require zfs
+require limine-install
+require mkinitcpio
+require systemctl
 require dialog || echo -e "${YELLOW}Dialog not found, falling back to text prompts.${NC}"
 
-check_uefi
-check_network
+# --- Get User and Pool Info ---
+read -p "Enter the username to set up Qtile for: " USERNAME
+if ! id "$USERNAME" &>/dev/null; then
+    fail "User '$USERNAME' does not exist. Please run bare-install.sh first."
+fi
 
-DISK="/dev/$(select_disk_dialog)"
-check_disk "$DISK"
+POOL_NAME=$(zpool list -H -o name | head -n 1)
+if [ -z "$POOL_NAME" ]; then
+    fail "No ZFS pool found. Please run bare-install.sh first."
+fi
+echo -e "${GREEN}Detected ZFS pool: ${POOL_NAME}${NC}"
 
-echo -e "${YELLOW}ZFS pool name, hostname, username, timezone, locale, keymap:${NC}"
-read -p "ZFS pool name [rpool]: " POOL_NAME; POOL_NAME=${POOL_NAME:-rpool}
-read -p "Hostname [arch-zfs]: " HOSTNAME; HOSTNAME=${HOSTNAME:-arch-zfs}
-read -p "Username [archuser]: " USERNAME; USERNAME=${USERNAME:-archuser}
-read -p "Timezone [Asia/Jakarta]: " TIMEZONE; TIMEZONE=${TIMEZONE:-Asia/Jakarta}
-read -p "Locale [en_US.UTF-8]: " LOCALE; LOCALE=${LOCALE:-en_US.UTF-8}
-read -p "Keymap [us]: " KEYMAP; KEYMAP=${KEYMAP:-us}
 
-confirm_dialog "This will DESTROY ALL DATA on $DISK and install Arch with ZFS and Cozytile Qtile desktop. Continue?" || fail "Installation aborted by user."
+confirm_dialog "This will install the Cozytile Qtile desktop environment and configure the system. Continue?" || fail "Installation aborted by user."
 
 setup_repos_and_keys
-partition_and_zfs
 install_packages
-configure_system
-finalize_in_chroot
+finalize_setup
 final_message
